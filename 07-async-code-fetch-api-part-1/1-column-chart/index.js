@@ -1,3 +1,5 @@
+import fetchJson from './utils/fetch-json.js';
+
 export default class ColumnChart {
   subElements = {};
   chartHeight = 50;
@@ -75,11 +77,10 @@ export default class ColumnChart {
   }
 
   async update(from, to) {
-    let url = new URL(this.url, 'https://course-js.javascript.ru');
+    const url = new URL(this.url, 'https://course-js.javascript.ru');
     url.searchParams.set('from', from.toISOString());
     url.searchParams.set('to', to.toISOString());
-    let response = await fetch(url.toString());
-    let data = await response.json();
+    const data = await fetchJson(url);
     if (!data) {
       this.element.classList.add('column-chart_loading');
     } else {
