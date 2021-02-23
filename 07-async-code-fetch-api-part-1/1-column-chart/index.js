@@ -1,12 +1,16 @@
 import fetchJson from './utils/fetch-json.js';
 
+const BACKEND_URL = 'https://course-js.javascript.ru';
+
 export default class ColumnChart {
+  element;
   subElements = {};
   chartHeight = 50;
 
   constructor({
-    link = '',
     label = '',
+    link = '',
+    formatHeading = data => data,
     url = '',
     range: {
       from = new Date(),
@@ -14,26 +18,68 @@ export default class ColumnChart {
     } = {}
 
   } = {}) {
+    this.url = new URL(url, BACKEND_URL);
 
     this.label = label;
     this.link = link;
-    this.url = url;
+    this.formatHeading = formatHeading;
 
     this.render();
-    this.update(from, to);
+    this.loadData(from, to);
+  }
+
+  render() {
+    const element = document.createElement('div');
+
+    element.innerHTML = this.template;
+
+    this.element = element.firstElementChild;
+    this.subElements = this.getSubElements(this.element);
+  }
+
+  getHeaderValue(data) {
+    return this.formatHeading(Object.values(data).reduce((accum, item) => (accum + item), 0));
+  }
+
+  /**
+   *
+   * @param {Date} from
+   * @param {Date} to
+   * @returns {Promise<void>}
+   */
+  async loadData(from, to) {
+    this.element.classList.add('column-chart_loading');
+
+    this.subElements.header.textContent = '';
+    this.subElements.body.innerHTML = '';
+
+    this.url.searchParams.set('from', from.toISOString()); // url = https://google.com + ?from=decodeURIComponent(...)
+    this.url.searchParams.set('to', to.toISOString());
+
+    const data = await fetchJson(this.url);
+
+    if (data && Object.values(data).length) {
+      this.subElements.header.textContent = this.getHeaderValue(data);
+      this.subElements.body.innerHTML = this.getColumnBody(data);
+
+      this.element.classList.remove('column-chart_loading');
+    }
   }
 
   getColumnBody(data) {
-    const maxValue = Math.max(...data);
-    const scale = this.chartHeight / maxValue;
+    const maxValue = Math.max(...Object.values(data));
 
-    return data
-      .map(item => {
-        const percent = (item / maxValue * 100).toFixed(0);
+    return Object.entries(data).map(([key, value]) => {
+      const scale = this.chartHeight / maxValue;
+      const percent = (value / maxValue * 100).toFixed(0);
+      const tooltip = `<span>
+        <small>${key.toLocaleString('default', {dateStyle: 'medium'})}</small>
+        <br>
+        <strong>${percent}%</strong>
+      </span>`;
 
-        return `<div style="--value: ${Math.floor(item * scale)}" data-tooltip="${percent}%"></div>`;
-      })
-      .join('');
+      return `<div style="--value: ${Math.floor(value * scale)}" data-tooltip="${tooltip}"></div>`;
+    }).join('');
   }
 
   getLink() {
@@ -48,22 +94,11 @@ export default class ColumnChart {
           ${this.getLink()}
         </div>
         <div class="column-chart__container">
-           <div data-element="header" class="column-chart__header"></div>
+          <div data-element="header" class="column-chart__header"></div>
           <div data-element="body" class="column-chart__chart"></div>
         </div>
       </div>
     `;
-  }
-
-
-  render() {
-    const element = document.createElement('div');
-
-    element.innerHTML = this.template;
-
-    this.element = element.firstElementChild;
-
-    this.subElements = this.getSubElements(this.element);
   }
 
   getSubElements(element) {
@@ -76,26 +111,17 @@ export default class ColumnChart {
     }, {});
   }
 
+  /**
+   *
+   * @param {Date} from
+   * @param {Date} to
+   * @returns {Promise<void>}
+   */
   async update(from, to) {
-    const url = new URL(this.url, 'https://course-js.javascript.ru');
-    url.searchParams.set('from', from.toISOString());
-    url.searchParams.set('to', to.toISOString());
-    const data = await fetchJson(url);
-    if (!data) {
-      this.element.classList.add('column-chart_loading');
-    } else {
-      this.element.classList.remove('column-chart_loading');
-    }
-    this.subElements.body.innerHTML = this.getColumnBody(Object.values(data));
-    this.subElements.header.innerHTML = Object.values(data).length;
-  }
-
-  remove () {
-    this.element.remove();
+    await this.loadData(from, to);
   }
 
   destroy() {
-    this.remove();
-    this.subElements = {};
+    this.element.remove();
   }
 }
